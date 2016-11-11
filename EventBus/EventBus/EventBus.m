@@ -7,8 +7,8 @@
 //
 
 #import "EventBus.h"
+#import <objc/runtime.h>
 
-static NSUInteger const kDEFAULT_CAPACITY = 20;
 static NSString * const kDEFAULT_BUS_NAME = @"EventBus_defaultBus";
 
 static char * const kNSObjectOfflineKey = "EventBus_OffLine";
@@ -72,8 +72,8 @@ static NSString * const kEventSubscribeRecordSubscriber = @"subscriber";
 
 @interface EventBus ()
 
-@property (nonatomic, strong) NSMutableArray * eventList;
-@property (nonatomic, strong) NSMutableDictionary * subscribeRecords;
+@property (nonatomic, strong) NSMutableArray<Event *> * eventList;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSMutableArray<EventSubscribeRecord *> *> * subscribeRecords;
 
 @end
 
@@ -84,12 +84,7 @@ static NSString * const kEventSubscribeRecordSubscriber = @"subscriber";
     return [EventBus busWithName:kDEFAULT_BUS_NAME];
 }
 
-+ (EventBus *)busWithName: (NSString *)busName
-{
-    return [EventBus busWithName:busName capacity:kDEFAULT_CAPACITY];
-}
-
-+ (EventBus *)busWithName: (NSString *)busName capacity: (NSUInteger)capacity
++ (EventBus *)busWithName:(NSString *)busName
 {
     static NSMutableArray * busList = nil;
     static dispatch_once_t onceToken;
@@ -106,7 +101,6 @@ static NSString * const kEventSubscribeRecordSubscriber = @"subscriber";
     if (!targetBus) {
         EventBus * eventBus = [[EventBus alloc] init];
         eventBus.busName = busName;
-        eventBus.capacity = capacity;
         [busList addObject:eventBus];
         targetBus = eventBus;
     }
@@ -127,7 +121,7 @@ static NSString * const kEventSubscribeRecordSubscriber = @"subscriber";
 - (void)subscribeEvent:(NSString *)eventName subscriber:(id<EventSubscriber>)subscriber
 {
     EventSubscribeRecord * targetSubscribeRecord = nil;
-    NSMutableArray * subscribeRecords = self.subscribeRecords[eventName];
+    NSMutableArray<EventSubscribeRecord *> * subscribeRecords = self.subscribeRecords[eventName];
     if (!subscribeRecords) {
         subscribeRecords = [NSMutableArray array];
     }
@@ -146,6 +140,7 @@ static NSString * const kEventSubscribeRecordSubscriber = @"subscriber";
     subscribeRecord.subscribeTime = [NSDate currentTimeInterval];
     [subscribeRecords addObject:subscribeRecord];
     self.subscribeRecords[eventName] = subscribeRecords;
+    
 }
 
 //取消订阅
@@ -171,40 +166,48 @@ static NSString * const kEventSubscribeRecordSubscriber = @"subscriber";
 //发布
 - (void)publishEvent:(NSString *)eventName publisher:(id<EventPublisher>)publisher
 {
+    [self publishEvent:eventName publisher:publisher params:nil];
+}
+
+- (void)publishEvent:(NSString *)eventName publisher:(id<EventPublisher>)publisher params:(id)params
+{
     Event * event = [[Event alloc] init];
     event.name = eventName;
     event.publisher = publisher;
     event.publishTime = [NSDate currentTimeInterval];
-    
-    if (self.capacity > 0) {
-        if (self.eventList.count >= self.capacity) {
-            [self.eventList removeObjectAtIndex:0];
-        }
+    event.life = 0;
+    if (params) {
+        event.params = params;
     }
-    [self.eventList addObject:event];
-    
     NSArray * subscribeRecords = self.subscribeRecords[eventName];
     //顺序从最早注册开始
     for (int i=0;i<subscribeRecords.count;i++) {
         EventSubscribeRecord * subscribeRecord = subscribeRecords[i];
         id<EventSubscriber> eventSubscriber = subscribeRecord.subscriber;
         BOOL offLine = ((NSObject *)eventSubscriber).offLine;
-        if(offLine) continue;
-        if ([eventSubscriber respondsToSelector:@selector(eventOccurred:event:)]) {
-            [eventSubscriber eventOccurred:eventName event:event];
-            [event.readerList addPointer:(__bridge void * _Nullable)(eventSubscriber)];
+        if(offLine){
+            event.life += 1;
+        }else{
+            if ([eventSubscriber respondsToSelector:@selector(eventOccurred:event:)]) {
+                [eventSubscriber eventOccurred:eventName event:event];
+                [event.readerList addPointer:(__bridge void * _Nullable)(eventSubscriber)];
+            }
         }
+    }
+    if(event.life > 0){
+        [self.eventList addObject:event];
     }
 }
 
 //获取从离线以来未读Event
 - (NSArray<Event *> *)checkEvent: (NSString *)eventName forSubscriber:(id<EventSubscriber>)subscriber
 {
-    NSArray<Event *> * results = nil;
-    if(![(NSObject *)subscriber offLine]) return results;
-    
-    NSMutableArray * unreadEvents = [NSMutableArray array];
-    for (int i=0;i<self.eventList.count;i++){
+    if(![(NSObject *)subscriber offLine]) return nil;
+    NSMutableArray<Event *> * unreadEvents = [NSMutableArray array];
+    NSMutableArray<Event *> * toRemovedEvents = [NSMutableArray array];
+    NSInteger eventCount = self.eventList.count;
+    //倒序检查，从最新的开始
+    for (NSInteger i=eventCount-1;i>=0;i--) {
         Event * event = self.eventList[i];
         if ([event.name isEqualToString:eventName]) {
             NSArray * subscribeRecords = self.subscribeRecords[eventName];
@@ -216,7 +219,6 @@ static NSString * const kEventSubscribeRecordSubscriber = @"subscriber";
                 }
             }
             if(!subscribeRecord) continue;
-            
             BOOL isEventReaded = NO;
             for (id<EventSubscriber> eventReader in event.readerList) {
                 if (eventReader == subscriber) {
@@ -225,20 +227,16 @@ static NSString * const kEventSubscribeRecordSubscriber = @"subscriber";
                 }
             }
             if(isEventReaded) continue;
-            //订阅时间的时间
-            NSTimeInterval subscribeTime = subscribeRecord.subscribeTime;
-            //时间发布时间
-            NSTimeInterval publishInterval = event.publishTime;
-            //自己离线时间(因为在线时事件都会已读 所以到这里 publishInterval 会一直大于 offLineInterval)
-            NSTimeInterval offLineInterval = ((NSObject *)subscriber).offLineInterval;
-            if (publishInterval > subscribeTime && publishInterval > offLineInterval) {
-                [unreadEvents addObject:event];
-                [event.readerList addPointer:(__bridge void * _Nullable)(subscriber)];
+            event.life -= 1;
+            [unreadEvents addObject:event];
+            [event.readerList addPointer:(__bridge void * _Nullable)(subscriber)];
+            if (event.life == 0) {
+                [toRemovedEvents addObject:event];
             }
         }
     }
-    results = [NSArray arrayWithArray:unreadEvents];
-    return results;
+    [self.eventList removeObjectsInArray:toRemovedEvents];
+    return unreadEvents;
 }
 
 - (BOOL)checkAnyEventsExists: (NSArray *)eventNames forSubscriber: (id<EventSubscriber>)subscriber

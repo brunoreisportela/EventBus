@@ -56,7 +56,7 @@
 - (IBAction)publishButtonPressed:(id)sender {
     NSString * eventName = self.publishTextfield.text;
     if(eventName.length == 0) return;
-    [[EventBus defaultBus] publishEvent:eventName publisher:self];
+    [[EventBus defaultBus] publishEvent:eventName publisher:self params:@"什么鬼？"];
     [self log:[NSString stringWithFormat:@"[publish] -> [%@]",eventName]];
     self.publishTextfield.text = nil;
     [self recoverUI];
@@ -130,7 +130,7 @@
 
 - (void)eventOccurred: (NSString *)eventName event: (Event *)event
 {
-    [self log:[NSString stringWithFormat:@"[received] -> [%@]",eventName]];
+    [self log:[NSString stringWithFormat:@"[received] -> [%@][%@]",eventName,event.params]];
 }
 
 - (void)log: (NSString *)message

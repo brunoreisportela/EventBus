@@ -139,6 +139,8 @@
 				TargetAttributes = {
 					1BF445EE1C83D86C0079CD10 = {
 						CreatedOnToolsVersion = 7.2;
+						DevelopmentTeam = 73AAK57BJ2;
+						ProvisioningStyle = Manual;
 					};
 				};
 			};
@@ -293,10 +295,13 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				DEVELOPMENT_TEAM = 73AAK57BJ2;
 				INFOPLIST_FILE = EventBus/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = net.duohuo.EventBus;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE = "ece5ec6e-c126-4428-8d87-1f7488bb4046";
+				PROVISIONING_PROFILE_SPECIFIER = "马甲 通用 Development";
 			};
 			name = Debug;
 		};
@@ -304,6 +309,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				DEVELOPMENT_TEAM = "";
 				INFOPLIST_FILE = EventBus/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = net.duohuo.EventBus;
