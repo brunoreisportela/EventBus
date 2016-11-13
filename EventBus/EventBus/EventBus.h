@@ -74,11 +74,9 @@
 
 /**
  *
- *  @param eventName 需要发布的事件的事件名
+ *  @param eventName  需要检查的事件的事件名
  *
- *  @param publisher 符合条件的发布者
- *
- *  @param params    事件所带参数（可传可不传）
+ *  @param subscriber 需要检查的事件的订阅者
  *
  *  @return 包含所有离线以来未读Event的NSArray
  *
